@@ -1,0 +1,106 @@
+#!/usr/bin/env python3
+import socket
+
+from tqdm import tqdm
+from whois import whois
+from argparse import ArgumentParser
+
+# TODO Reduce scope?
+DOMAINS = ['.com']
+
+# TODO Get licence for this file / Swap for word net
+POPULAR_WORD_FILE = 'data/popular_words.txt'
+PREFIX_FILE = 'data/prefix.txt'
+
+# TODO Reduce scope?
+OUTPUT_FILE = ''
+
+
+def write_output(url):
+    if OUTPUT_FILE:
+        with open(OUTPUT_FILE, mode='a+') as f:
+            f.write('{0}\n'.format(url))
+    else:
+        tqdm.write('available: {0}'.format(url))
+
+
+def file_to_list(file_name):
+    with open(file_name) as f:
+        words = f.read().splitlines()
+        return words
+
+
+def has_dns_record(url):
+    record = True
+    if not socket_check(url):
+        record = whois_check(url)
+
+    return record
+
+
+def socket_check(url):
+    try:
+        socket.gethostbyname(url)
+        return True
+    except:
+        return False
+
+
+# TODO pipe any errors to tqdm write
+def whois_check(url):
+    try:
+        request = whois(url)
+        return request.get('whois_server', None)
+    except:
+        return False
+
+
+# TODO return generator instead of list
+def generate_urls(input_word=None):
+    if input_word:
+        words = [input_word]
+    else:
+        words = file_to_list(POPULAR_WORD_FILE)
+
+    prefixes = file_to_list(PREFIX_FILE)
+    return [
+        prefix + word + domain
+        for prefix in prefixes
+        for word in words
+        for domain in DOMAINS
+    ]
+
+
+def check_urls(urls):
+    for url in tqdm(urls):
+        if not has_dns_record(url):
+            write_output(url)
+
+
+def search(for_word=None):
+    urls = generate_urls(for_word)
+    check_urls(urls)
+
+
+# TODO better error checks on domains
+def format_domains(domains):
+    return list(map(lambda x: '.' + x if x[0] != '.' else x, domains))
+
+
+if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument('-w', '--word', help='Looks for given word')
+    parser.add_argument('-d', '--domain', nargs='+', help='Set domains to search for')
+    parser.add_argument('-f', '--file', help='Speficy an output file')
+    args = parser.parse_args()
+
+    if args.domain:
+        DOMAINS = format_domains(args.domain)
+
+    if args.file:
+        OUTPUT_FILE = args.file
+
+    try:
+        search(args.word)
+    except Exception as e:
+        tqdm.write('Error: {0}'.format(e))
